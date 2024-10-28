@@ -40,10 +40,9 @@ impl MerkleTree {
     /// // Create a new Merkle tree from the data
     /// let merkle_tree = MerkleTree::new(data);
     ///
-    pub fn new(data: Vec<(Address, U256)>) -> Self {
-        let mut elements: Vec<H256> = data.iter().map(|x| Self::hash_node(*x)).collect();
+    pub fn new(mut elements: Vec<H256>) -> Self {
         // sort and deduplicate to get the correct order of elements
-        elements.sort();
+        // elements.sort();
         elements.dedup();
         let leaves = elements.len();
         let mut layers = vec![elements.clone()];
@@ -146,26 +145,6 @@ impl MerkleTree {
     /// # Returns
     ///
     /// A `H256` value representing the hash of the leaf node.
-    pub fn hash_node(leaf_data: (Address, U256)) -> H256 {
-        let (account, amount) = leaf_data;
-
-        let mut account_bytes = [0u8; 20];
-        account_bytes.copy_from_slice(account.as_bytes());
-
-        let mut amount_bytes = [0u8; 32];
-        amount.to_big_endian(&mut amount_bytes);
-
-        let encoded_data =
-            ethabi::encode(&[ethabi::Token::Address(account), ethabi::Token::Uint(amount)]);
-
-        let hashed_data = keccak256(encoded_data);
-
-        let mut concatenated_data = Vec::new();
-        concatenated_data.extend_from_slice(&hashed_data);
-
-        let final_hash = keccak256(concatenated_data);
-        H256::from(final_hash)
-    }
 
     fn next_layer(elements: &[H256]) -> Vec<H256> {
         elements
@@ -194,6 +173,28 @@ impl MerkleTree {
 mod test {
     use super::*;
     use std::str::FromStr;
+
+    pub fn hash_node(leaf_data: (Address, U256)) -> H256 {
+        let (account, amount) = leaf_data;
+
+        let mut account_bytes = [0u8; 20];
+        account_bytes.copy_from_slice(account.as_bytes());
+
+        let mut amount_bytes = [0u8; 32];
+        amount.to_big_endian(&mut amount_bytes);
+
+        let encoded_data =
+            ethabi::encode(&[ethabi::Token::Address(account), ethabi::Token::Uint(amount)]);
+
+        let hashed_data = keccak256(encoded_data);
+
+        let mut concatenated_data = Vec::new();
+        concatenated_data.extend_from_slice(&hashed_data);
+
+        let final_hash = keccak256(concatenated_data);
+        H256::from(final_hash)
+    }
+
     fn setup_tree() -> MerkleTree {
         let data = vec![
             (
@@ -205,7 +206,8 @@ mod test {
                 U256::from_dec_str("73750290420694562195").unwrap(),
             ),
         ];
-        MerkleTree::new(data)
+        let elements: Vec<H256> = data.iter().map(|x| hash_node(*x)).collect();
+        MerkleTree::new(elements)
     }
     #[test]
     fn merkle_tree_creation() {
@@ -234,7 +236,7 @@ mod test {
             U256::from_dec_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let proof = tree.get_proof(MerkleTree::hash_node(data)).unwrap();
+        let proof = tree.get_proof(hash_node(data)).unwrap();
 
         assert!(
             !proof.is_empty(),
@@ -248,7 +250,7 @@ mod test {
             U256::from_dec_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let proof_result = tree.get_proof(MerkleTree::hash_node(data));
+        let proof_result = tree.get_proof(hash_node(data));
 
         assert!(
             proof_result.is_none(),
@@ -262,7 +264,7 @@ mod test {
             U256::from_dec_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let node = MerkleTree::hash_node(data);
+        let node = hash_node(data);
         let proof = tree.get_proof(node).unwrap();
         let result = tree.verify_proof(node, proof, tree.get_root().unwrap());
 
@@ -279,7 +281,7 @@ mod test {
             U256::from_dec_str("1840233889215604334017").unwrap(),
         );
         let tree = setup_tree();
-        let node = MerkleTree::hash_node(data);
+        let node = hash_node(data);
         let proof = tree.get_proof(node).unwrap();
         let result = tree.verify_proof(node, proof, tree.get_root().unwrap());
 
